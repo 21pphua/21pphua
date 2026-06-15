@@ -60,13 +60,10 @@ FACTOR_WEIGHTS: dict[str, float] = {
 # How many Stage-1 survivors advance to the deep assessment by default.
 DEFAULT_TOP_N: int = 10
 
-# A small, dependency-free default universe so the tool runs out of the box.
-# Override with --universe <file> (one ticker per line) for the real thing.
-DEFAULT_UNIVERSE: tuple[str, ...] = (
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "AVGO", "TSLA",
-    "V", "MA", "JPM", "UNH", "COST", "HD", "PG", "JNJ", "ABBV", "KO",
-    "WMT", "XOM",
-)
+# Default universe: a built-in name (resolved by stockscan.universe) or a path.
+# "sp500" is the real S&P 500 list packaged with the tool; "dow30" is a quick
+# 30-name option. Override with --universe <name|file> or --tickers.
+DEFAULT_UNIVERSE: str = "sp500"
 
 # ---------------------------------------------------------------------------
 # LLM research (Stage 2 CORE-subscore drafting)

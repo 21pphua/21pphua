@@ -18,6 +18,7 @@ from typing import Optional, Sequence
 from stockscan import __version__
 from stockscan.config import DEFAULT_TOP_N, DEFAULT_UNIVERSE, M8_MAX
 from stockscan.assess.pipeline import AssessmentInput, AssessmentResult, assess
+from stockscan.universe import resolve_universe, list_builtin_universes
 from stockscan import report
 
 
@@ -28,10 +29,7 @@ from stockscan import report
 def _load_universe(args) -> list[str]:
     if args.tickers:
         return [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
-    if args.universe:
-        with open(args.universe) as fh:
-            return [ln.strip().upper() for ln in fh if ln.strip() and not ln.startswith("#")]
-    return list(DEFAULT_UNIVERSE)
+    return resolve_universe(args.universe or DEFAULT_UNIVERSE)
 
 
 def _progress(i: int, n: int, ticker: str) -> None:
@@ -168,6 +166,23 @@ def cmd_demo(args) -> int:
     return 0
 
 
+def cmd_universes(args) -> int:
+    names = list_builtin_universes()
+    if not names:
+        print("No built-in universes packaged.")
+        return 0
+    print("Built-in universes:")
+    for name in names:
+        try:
+            count = len(resolve_universe(name))
+        except Exception:
+            count = "?"
+        marker = "  (default)" if name == DEFAULT_UNIVERSE else ""
+        print(f"  {name:<10} {count} tickers{marker}")
+    print("\nUse: stockscan scan --universe <name|file>")
+    return 0
+
+
 def cmd_screen(args) -> int:
     from stockscan.data.providers import get_provider
     from stockscan.screen.stage1 import screen_universe
@@ -245,7 +260,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_universe_args(sp):
         sp.add_argument("--tickers", help="Comma-separated tickers (overrides --universe).")
-        sp.add_argument("--universe", help="Path to a file of tickers (one per line).")
+        sp.add_argument(
+            "--universe",
+            help=f"Built-in name ({', '.join(list_builtin_universes()) or 'none'}) "
+            f"or a path to a file of tickers (default: {DEFAULT_UNIVERSE}).",
+        )
         sp.add_argument("--provider", default="yfinance", help="Data provider (default: yfinance).")
 
     def add_research_args(sp):
@@ -254,6 +273,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("demo", help="Run the worked example offline (no deps).")
     sp.set_defaults(func=cmd_demo)
+
+    sp = sub.add_parser("universes", help="List built-in universes.")
+    sp.set_defaults(func=cmd_universes)
 
     sp = sub.add_parser("screen", help="Stage 1 only: rank a universe.")
     add_universe_args(sp)

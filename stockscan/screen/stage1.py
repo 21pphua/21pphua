@@ -39,15 +39,23 @@ def screen_universe(
     on_progress:
         Optional callable ``(i, n, ticker)`` for CLI progress output.
     """
-    snapshots: list[MarketSnapshot] = []
-    n = len(tickers)
-    for i, ticker in enumerate(tickers, 1):
-        if on_progress:
-            on_progress(i, n, ticker)
-        try:
-            snapshots.append(provider.snapshot(ticker))
-        except Exception:  # pragma: no cover - one bad ticker shouldn't sink the run
-            snapshots.append(MarketSnapshot(ticker=ticker))
+    tickers = list(tickers)
+
+    # Prefer the batched path (one price download + pooled fundamentals) when
+    # the provider offers it — essential for a 500-name universe.
+    bulk = getattr(provider, "bulk_snapshot", None)
+    if callable(bulk):
+        snapshots = bulk(tickers, on_progress=on_progress)
+    else:
+        snapshots = []
+        n = len(tickers)
+        for i, ticker in enumerate(tickers, 1):
+            if on_progress:
+                on_progress(i, n, ticker)
+            try:
+                snapshots.append(provider.snapshot(ticker))
+            except Exception:  # pragma: no cover - one bad ticker shouldn't sink the run
+                snapshots.append(MarketSnapshot(ticker=ticker))
 
     scored = score_factors(snapshots)
     order = sorted(

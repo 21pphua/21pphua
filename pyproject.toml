@@ -30,5 +30,8 @@ stockscan = "stockscan.cli:main"
 [tool.setuptools.packages.find]
 include = ["stockscan*"]
 
+[tool.setuptools.package-data]
+stockscan = ["universes/*.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

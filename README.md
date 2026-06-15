@@ -51,6 +51,10 @@ The research step needs an API key:
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+**Network egress:** the Stage-1 screen pulls from Yahoo Finance via yfinance.
+On a restricted/cloud environment, allow egress to `query1.finance.yahoo.com`
+and `query2.finance.yahoo.com` (the offline `demo` needs no network).
+
 ## Usage
 
 ### Prove the engine offline (no deps, no key)
@@ -65,10 +69,15 @@ the evidence cap auto-firing (decisive `18 → 14`).
 ### Stage 1 only — rank a universe
 
 ```bash
-stockscan screen --top 10
-stockscan screen --universe my_watchlist.txt --top 15
+stockscan universes                          # list built-in universes
+stockscan screen --top 10                    # default universe: sp500 (503 names)
+stockscan screen --universe dow30 --top 10   # the Dow 30, quicker
+stockscan screen --universe my_watchlist.txt # your own file (one ticker/line)
 stockscan screen --tickers AAPL,MSFT,NVDA,V
 ```
+
+Built-in universes (`sp500`, `dow30`) are packaged with the tool. Refresh the
+S&P 500 list any time with `python scripts/refresh_universes.py`.
 
 ### Stage 2 — assess one name (LLM draft → you confirm)
 
@@ -84,8 +93,8 @@ You'll see the drafted CORE subscores with their cited facts and can
 ### Full funnel
 
 ```bash
-stockscan scan --top 8                # screen the default universe, assess top 8
-stockscan scan --universe sp500.txt --top 12 --yes
+stockscan scan --top 8                 # screen the S&P 500, assess the top 8
+stockscan scan --universe dow30 --top 12 --yes
 ```
 
 Produces the Stage-1 table, a per-name A+ assessment, and a final ranking.
@@ -139,11 +148,15 @@ The four upgrades are also importable individually: `m8_score`,
 ```
 stockscan/
   assess/      the A+ engine — m8, ev, oppcost, spec, pipeline
-  data/        market-data providers (yfinance; swap-in seam for a paid feed)
+  data/        market-data providers (yfinance bulk; swap-in seam for a paid feed)
   screen/      Stage-1 factors + ranking
   research/    LLM-drafted CORE subscores (Claude, structured output)
+  universes/   packaged ticker lists (sp500.txt, dow30.txt)
+  universe.py  resolve a built-in name or a file path
   report.py    rendering
   cli.py       the `stockscan` command
+scripts/
+  refresh_universes.py   regenerate the S&P 500 list
 tests/         pinned to the spec's worked examples
 ```
 
@@ -158,7 +171,8 @@ pytest
 
 - **Paid data feed** — `data/providers.py` has a `get_provider()` factory; add a
   `PolygonProvider` / `FMPProvider` without touching the screen or engine.
-- **Wider universe** — point `--universe` at an S&P 500 / Russell list.
+- **More universes** — drop a file in `stockscan/universes/` (e.g. a Russell
+  list) and it's instantly available by name.
 - **Persisted runs** — assessments are plain dataclasses; easy to serialize.
 - *Deliberately excluded* (per the spec's anti-bloat line): sell/trim engine,
   multi-factor exposure tags, rename — none sharpen *judging a stock*.
