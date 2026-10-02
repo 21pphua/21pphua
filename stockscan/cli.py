@@ -6,6 +6,7 @@ Commands
   screen   Stage 1 only: rank a universe by the quantitative composite.
   assess   Stage 2 on one ticker: LLM-draft -> you confirm -> pressure-test.
   scan     Full funnel: screen -> draft survivors -> confirm -> ranked report.
+  sar      SAR Trading breakout scan: filters -> checklist score -> targets.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import sys
 from typing import Optional, Sequence
 
 from stockscan import __version__
-from stockscan.config import DEFAULT_TOP_N, DEFAULT_UNIVERSE, M8_MAX
+from stockscan.config import DEFAULT_TOP_N, DEFAULT_UNIVERSE, M8_MAX, SAR_TAKE_AT
 from stockscan.assess.pipeline import AssessmentInput, AssessmentResult, assess
 from stockscan.universe import resolve_universe, list_builtin_universes
 from stockscan import report
@@ -246,6 +247,27 @@ def cmd_scan(args) -> int:
     return 0
 
 
+def cmd_sar(args) -> int:
+    from stockscan.sar.scan import run_sar_scan, write_shortlist
+    from stockscan.sar.render import render_sar_scan
+
+    if args.universe is None and not args.tickers:
+        args.universe = "us_all" if "us_all" in list_builtin_universes() else DEFAULT_UNIVERSE
+    tickers = _load_universe(args)
+    print(f"SAR scan: {len(tickers)} names (daily bars via yfinance) ...", file=sys.stderr)
+    res = run_sar_scan(tickers, min_score=args.min_score, top=args.top,
+                       apply_filters=not args.no_filters, on_progress=_progress)
+    print(render_sar_scan(res))
+    if args.detail:
+        from stockscan.sar.render import render_setup
+        for s in res.breakouts:
+            print(render_setup(s))
+    if args.out:
+        write_shortlist(res, args.out)
+        print(f"Shortlist written to {args.out} — load it in the SAR Setup Walkthrough.", file=sys.stderr)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # parser
 # ---------------------------------------------------------------------------
@@ -293,6 +315,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--top", type=int, default=DEFAULT_TOP_N, help="Survivors to assess.")
     add_research_args(sp)
     sp.set_defaults(func=cmd_scan)
+
+    sp = sub.add_parser("sar", help="SAR Trading breakout scan (checklist score + targets).")
+    add_universe_args(sp)
+    sp.add_argument("--min-score", type=int, default=SAR_TAKE_AT,
+                    help=f"Minimum 0-100 score for a breakout to list (default {SAR_TAKE_AT}).")
+    sp.add_argument("--top", type=int, default=25, help="Max names per list (default 25).")
+    sp.add_argument("--out", help="Write a shortlist JSON (with candles) for the web walkthrough.")
+    sp.add_argument("--detail", action="store_true", help="Print the full checklist for each breakout.")
+    sp.add_argument("--no-filters", action="store_true", help="Skip the price / ADR / $ volume filters.")
+    sp.set_defaults(func=cmd_sar)
 
     return p
 

@@ -73,3 +73,33 @@ DEFAULT_UNIVERSE: str = "sp500"
 LLM_MODEL: str = "claude-opus-4-8"
 LLM_MAX_TOKENS: int = 8000
 LLM_EFFORT: str = "high"
+
+# ---------------------------------------------------------------------------
+# SAR Trading breakout scanner (stockscan sar)
+# ---------------------------------------------------------------------------
+
+# Lookback windows (daily bars): run-up window, then the pullback base.
+SAR_RUNUP_LOOKBACK: int = 40
+SAR_PULLBACK_LOOKBACK: int = 20
+
+# Checklist weights (sum to 100): run-up, SMA incline, tightening, volume
+# dry-up, range break, breakout volume, close near high. Breakout volume +
+# range break weighted heaviest. This weighting is ours, not the source doc's.
+SAR_WEIGHTS: tuple[int, ...] = (15, 15, 10, 10, 20, 20, 10)
+
+# Verdict cutoffs on the 0-100 score.
+SAR_TAKE_AT: int = 65
+SAR_WATCH_AT: int = 40
+
+# Stock filters from the doc: price > $1, ADR% > 5, avg daily $ volume > $3.5M.
+SAR_MIN_PRICE: float = 1.0
+SAR_MIN_ADR: float = 0.05
+SAR_MIN_DOLLAR_VOL: float = 3_500_000
+
+# "Coiling" watchlist: steps 01-04 score >= this (of 50) and the close sits
+# within SAR_COIL_MAX_GAP below the base high.
+SAR_COIL_MIN_PREP: int = 35
+SAR_COIL_MAX_GAP: float = 0.03
+
+# Market-regime indexes (10 SMA above 20 SMA = favorable).
+SAR_REGIME_INDEXES: tuple[str, ...] = ("SPY", "QQQ")
