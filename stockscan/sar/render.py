@@ -34,6 +34,18 @@ def _target(s: SetupScore, label: str) -> str:
     return "—"
 
 
+def _positions_lines(r: SarScanResult) -> list[str]:
+    if not r.positions:
+        return []
+    order = {"STOPPED": 0, "EXIT": 1, "5R HIT": 2, "NEAR EXIT": 3, "HOLD": 4, "NO DATA": 5}
+    out = [f"YOUR POSITIONS ({len(r.positions)})", "-" * 78]
+    for p in sorted(r.positions, key=lambda p: order.get(p.status, 9)):
+        out.append(f"  {p.ticker:<7}{p.status:<10}{p.shares:>6} sh  last {p.last:>8.2f}  {p.r_now:+5.1f}R  "
+                   f"{'+' if p.pnl >= 0 else '-'}${abs(p.pnl):,.0f}")
+        out.append(f"           {p.action}")
+    return out + [""]
+
+
 def render_sar_scan(r: SarScanResult) -> str:
     lines = [
         "",
@@ -42,6 +54,7 @@ def render_sar_scan(r: SarScanResult) -> str:
         f"Scanned {r.scanned} · with data {r.with_data} · passed filters {r.passed_filters}  ({r.generated})",
         _regime_line(r),
         "",
+        *_positions_lines(r),
         f"BREAKOUTS ({len(r.breakouts)})",
         "-" * 78,
     ]
@@ -66,6 +79,10 @@ def render_sar_scan(r: SarScanResult) -> str:
             )
     else:
         lines.append("  none")
+    if r.wide_stop:
+        lines += ["", f"WIDE STOP — watch only ({len(r.wide_stop)}): broke out, but the stop is farther than a normal day", "-" * 78]
+        for s in r.wide_stop[:12]:
+            lines.append(f"  {s.ticker:<7}{s.score:>6}  entry {s.entry:.2f}  stop {s.stop:.2f}  ({s.risk_adr:.1f}x ADR)")
     if r.counter_trend:
         lines += ["", f"SKIPPED — COUNTER-TREND ({len(r.counter_trend)}): scored well, but not in a long-term uptrend", "-" * 78]
         for s in r.counter_trend[:12]:

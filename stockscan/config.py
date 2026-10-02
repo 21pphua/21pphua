@@ -88,7 +88,7 @@ SAR_PULLBACK_LOOKBACK: int = 20
 SAR_WEIGHTS: tuple[int, ...] = (15, 15, 10, 10, 20, 20, 10)
 
 # Verdict cutoffs on the 0-100 score.
-SAR_TAKE_AT: int = 65
+SAR_TAKE_AT: int = 75   # backtest: 65-74 lost money, 75+ made money
 SAR_WATCH_AT: int = 40
 
 # Stock filters from the doc: price > $1, ADR% > 5, avg daily $ volume > $3.5M.
@@ -105,6 +105,9 @@ SAR_COIL_MAX_GAP: float = 0.03
 # (risk / entry > SAR_MAX_RISK_ADR * ADR%). Wide stops get shaken out less but
 # force tiny positions; size down or skip.
 SAR_MAX_RISK_ADR: float = 1.0
+# Breakouts with a stop wider than SAR_MAX_RISK_ADR go to a separate WIDE-STOP
+# watch list instead of BREAKOUTS (backtest: wide stops ~+0.02R vs +0.48R tight).
+SAR_REQUIRE_TIGHT_STOP: bool = True
 
 # Flag names that report earnings within this many calendar days.
 SAR_EARNINGS_WARN_DAYS: int = 10

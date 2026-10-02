@@ -57,7 +57,7 @@ def _regime_by_date(index_bars: Sequence[Bar]) -> dict[str, bool]:
 
 def backtest_ticker(ticker: str, bars: Sequence[Bar], min_score: int = SAR_TAKE_AT,
                     partial: float = 0.20, max_risk_adr: Optional[float] = None,
-                    regime: Optional[dict[str, bool]] = None, trend_filter: bool = False) -> list[Trade]:
+                    regime: Optional[dict[str, bool]] = None, trend_filter: bool = True) -> list[Trade]:
     S = Series(bars)
     n = len(S)
     trades: list[Trade] = []
@@ -179,7 +179,7 @@ class BacktestResult:
 def run_backtest(tickers: Sequence[str], fetch: Callable[..., dict], period: str = "3y",
                  chunk: int = 200, min_score: int = SAR_TAKE_AT, partial: float = 0.20,
                  max_risk_adr: Optional[float] = None, on_progress=None,
-                 trend_filter: bool = False) -> BacktestResult:
+                 trend_filter: bool = True) -> BacktestResult:
     """Fetch history chunk-by-chunk (keeps memory flat) and simulate every ticker."""
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
     idx = fetch([SAR_REGIME_INDEXES[0]], period=period)

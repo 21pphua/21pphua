@@ -27,8 +27,13 @@ def summary(doc: dict) -> tuple[str, str]:
     market = "Market FAVORABLE" if ok else "Market UNFAVORABLE" if ok is not None else "Market unknown"
     res = doc.get("results", [])
     bo = [r for r in res if r.get("kind") == "breakout"]
-    co = [r for r in res if r.get("kind") != "breakout"]
+    co = [r for r in res if r.get("kind") == "coiling"]
     lines = [market, ""]
+    pos = [p for p in doc.get("positions", []) if p.get("status") not in ("HOLD", None)]
+    if pos:
+        lines.append("ACTION ON YOUR POSITIONS")
+        lines += [f"{p['ticker']} {p['status']}: {p['action']}" for p in pos]
+        lines.append("")
     if bo:
         lines.append(f"BREAKOUTS ({len(bo)})")
         for r in bo[:10]:
@@ -37,6 +42,10 @@ def summary(doc: dict) -> tuple[str, str]:
                 flags.append("earnings soon")
             if r.get("wide_stop"):
                 flags.append("wide stop")
+            if r.get("fired"):
+                flags.insert(0, "FIRED from alerts")
+            elif r.get("new"):
+                flags.insert(0, "new")
             f = f"  [{', '.join(flags)}]" if flags else ""
             lines.append(f"{r['ticker']} {r['score']}  buy {r['entry']:.2f} stop {r['stop']:.2f}{f}")
     else:
@@ -44,7 +53,8 @@ def summary(doc: dict) -> tuple[str, str]:
     if co:
         lines += ["", f"ALERTS ({len(co)})"]
         lines += [f"{r['ticker']} > {r['base_high']:.2f}" for r in co[:10]]
-    title = f"SAR scan: {len(bo)} breakout{'s' if len(bo) != 1 else ''} · {market.split()[1].lower()}"
+    title = (f"SAR: {len(pos)} position action{'s' if len(pos) != 1 else ''} · " if pos else "SAR scan: ") + \
+            f"{len(bo)} breakout{'s' if len(bo) != 1 else ''} · {market.split()[1].lower()}"
     return title, "\n".join(lines)
 
 
