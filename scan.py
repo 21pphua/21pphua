@@ -23,7 +23,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Callable, Optional, Sequence
 
-from stockscan.config import SAR_TAKE_AT, SAR_REGIME_INDEXES, SAR_EARNINGS_WARN_DAYS, SAR_TREND_FILTER
+from stockscan.config import (SAR_TAKE_AT, SAR_REGIME_INDEXES, SAR_EARNINGS_WARN_DAYS, SAR_TREND_FILTER,
+                              SAR_REQUIRE_TIGHT_STOP)
 from stockscan.sar.engine import (
     Bar, SetupScore, Series, passes_filters, score_setup, market_regime,
 )
@@ -152,7 +153,7 @@ def evaluate_position(p: Position, bars: Sequence[Bar]) -> Position:
         p.status = "HOLD"
         p.action = f"On track. Stop {stop:.2f}. Sell on a daily close below the 10 SMA ({(p.sma10 or 0):.2f})."
     p.bars = [[b.date, round(b.open, 4), round(b.high, 4), round(b.low, 4), round(b.close, 4), int(b.volume)]
-              for b in bars[-60:]]
+              for b in bars[-260:]]
     return p
 
 
@@ -166,8 +167,12 @@ class SarScanResult:
     breakouts: list[SetupScore] = field(default_factory=list)
     coiling: list[SetupScore] = field(default_factory=list)
     counter_trend: list[SetupScore] = field(default_factory=list)
+    wide_stop: list[SetupScore] = field(default_factory=list)
     positions: list[Position] = field(default_factory=list)
     bars: dict[str, list[Bar]] = field(default_factory=dict)
+    all_scored: list[SetupScore] = field(default_factory=list)
+    all_bars: dict[str, list[Bar]] = field(default_factory=dict)
+    filtered_out: dict[str, str] = field(default_factory=dict)
 
     @property
     def regime_ok(self) -> Optional[bool]:
@@ -245,7 +250,8 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
                  top: int = 25, apply_filters: bool = True, on_progress=None,
                  today: Optional[str] = "auto", earnings=lookup_earnings,
                  trend_filter: bool = SAR_TREND_FILTER,
-                 positions: Optional[list[Position]] = None) -> SarScanResult:
+                 positions: Optional[list[Position]] = None,
+                 require_tight_stop: bool = SAR_REQUIRE_TIGHT_STOP) -> SarScanResult:
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
     today = _session_open_today() if today == "auto" else today
     data = {k: drop_partial_bar(v, today) for k, v in fetch(tickers, on_progress=on_progress).items()}
@@ -262,45 +268,54 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
     breakouts: list[SetupScore] = []
     coiling: list[SetupScore] = []
     counter: list[SetupScore] = []
+    wide: list[SetupScore] = []
+    scored: list[SetupScore] = []
+    filtered_out: dict[str, str] = {}
     for tk in tickers:
         bars = data.get(tk) or []
         if not bars:
+            filtered_out[tk] = "no price data"
             continue
         with_data += 1
         if apply_filters:
-            ok, _ = passes_filters(bars)
+            ok, why = passes_filters(bars)
             if not ok:
+                filtered_out[tk] = why
                 continue
         try:
             s = score_setup(bars, ticker=tk)
         except ValueError:
+            filtered_out[tk] = "not enough history"
             continue
         passed += 1
+        scored.append(s)
         qualifies = (s.is_breakout and s.score >= min_score) or s.is_coiling
         if trend_filter and qualifies and s.trend_ok is False:
             counter.append(s)
             continue
         if s.is_breakout and s.score >= min_score and breakout_volx(bars) >= MIN_BREAKOUT_VOLX:
-            breakouts.append(s)
+            (wide if require_tight_stop and s.wide_stop else breakouts).append(s)
         elif s.is_coiling or (s.is_breakout and s.score >= min_score):  # low-volume break = unconfirmed
             coiling.append(s)
 
     breakouts.sort(key=lambda s: s.score, reverse=True)
     coiling.sort(key=lambda s: (s.prep_points, s.gap_to_base), reverse=True)
     counter.sort(key=lambda s: s.score, reverse=True)
-    breakouts, coiling, counter = breakouts[:top], coiling[:top], counter[:top]
-    keep = {s.ticker for s in breakouts + coiling}
+    wide.sort(key=lambda s: s.score, reverse=True)
+    breakouts, coiling, counter, wide = breakouts[:top], coiling[:top], counter[:top], wide[:top]
+    keep = {s.ticker for s in breakouts + coiling + wide}
     if earnings and keep:
-        _attach_earnings(breakouts + coiling, earnings(sorted(keep)))
+        _attach_earnings(breakouts + coiling + wide, earnings(sorted(keep)))
     return SarScanResult(
         generated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         scanned=len(tickers), with_data=with_data, passed_filters=passed, regime=regime,
-        breakouts=breakouts, coiling=coiling, counter_trend=counter, positions=positions,
+        breakouts=breakouts, coiling=coiling, counter_trend=counter, wide_stop=wide, positions=positions,
         bars={t: data[t] for t in keep},
+        all_scored=scored, all_bars={x.ticker: data[x.ticker] for x in scored}, filtered_out=filtered_out,
     )
 
 
-def _setup_json(s: SetupScore, kind: str, bars: list[Bar], keep_bars: int = 130) -> dict:
+def _setup_json(s: SetupScore, kind: str, bars: list[Bar], keep_bars: int = 260) -> dict:
     d = asdict(s)
     d["kind"] = kind
     d["risk_adr"] = round(s.risk_adr, 2)
@@ -325,8 +340,8 @@ def _previous(path: str, generated: str) -> Optional[dict]:
         return old["previous"]
     res = old.get("results", [])
     return {"generated": old.get("generated"),
-            "breakouts": [r["ticker"] for r in res if r.get("kind") == "breakout"],
-            "coiling": [r["ticker"] for r in res if r.get("kind") != "breakout"]}
+            "breakouts": [r["ticker"] for r in res if r.get("kind") in ("breakout", "wide")],
+            "coiling": [r["ticker"] for r in res if r.get("kind") == "coiling"]}
 
 
 def write_shortlist(result: SarScanResult, path: str) -> None:
@@ -340,7 +355,8 @@ def write_shortlist(result: SarScanResult, path: str) -> None:
         "regime": result.regime,
         "counter_trend": [{"ticker": s.ticker, "score": s.score, "why": s.trend_note} for s in result.counter_trend],
         "results": [_setup_json(s, "breakout", result.bars[s.ticker]) for s in result.breakouts]
-                   + [_setup_json(s, "coiling", result.bars[s.ticker]) for s in result.coiling],
+                   + [_setup_json(s, "coiling", result.bars[s.ticker]) for s in result.coiling]
+                   + [_setup_json(s, "wide", result.bars[s.ticker]) for s in result.wide_stop],
         "positions": [asdict(p) for p in result.positions],
         "previous": prev,
     }
@@ -348,6 +364,27 @@ def write_shortlist(result: SarScanResult, path: str) -> None:
         seen = set(prev.get("breakouts", [])) | set(prev.get("coiling", []))
         for r in doc["results"]:
             r["new"] = r["ticker"] not in seen
-            r["fired"] = r["kind"] == "breakout" and r["ticker"] in set(prev.get("coiling", []))
+            r["fired"] = r["kind"] in ("breakout", "wide") and r["ticker"] in set(prev.get("coiling", []))
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, indent=1)
+    write_all_scores(result, os.path.join(os.path.dirname(path) or ".", "all_scores.json"))
+
+
+def write_all_scores(result: SarScanResult, path: str, keep_bars: int = 130) -> None:
+    """Every stock that passed the filters, scored exactly like the shortlist.
+
+    Lets the web page look up any ticker and get the same score the scanner gives.
+    """
+    kinds = {s.ticker: "breakout" for s in result.breakouts}
+    kinds.update({s.ticker: "coiling" for s in result.coiling})
+    kinds.update({s.ticker: "counter" for s in result.counter_trend})
+    kinds.update({s.ticker: "wide" for s in result.wide_stop})
+    doc = {
+        "format": "sar-all/1",
+        "generated": result.generated,
+        "scores": [_setup_json(s, kinds.get(s.ticker, "none"), result.all_bars.get(s.ticker, []), keep_bars)
+                   for s in result.all_scored],
+        "filtered_out": result.filtered_out,
+    }
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, separators=(",", ":"))

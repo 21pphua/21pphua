@@ -27,7 +27,7 @@ def summary(doc: dict) -> tuple[str, str]:
     market = "Market FAVORABLE" if ok else "Market UNFAVORABLE" if ok is not None else "Market unknown"
     res = doc.get("results", [])
     bo = [r for r in res if r.get("kind") == "breakout"]
-    co = [r for r in res if r.get("kind") != "breakout"]
+    co = [r for r in res if r.get("kind") == "coiling"]
     lines = [market, ""]
     pos = [p for p in doc.get("positions", []) if p.get("status") not in ("HOLD", None)]
     if pos:

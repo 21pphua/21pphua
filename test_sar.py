@@ -111,7 +111,7 @@ def test_run_scan_with_fake_fetcher(tmp_path):
         return {t: (up if t in ("SPY", "QQQ") else universe.get(t, [])) for t in tickers}
 
     res = run_sar_scan(list(universe), fetch=fake_fetch, min_score=65, apply_filters=False,
-                       today=None, earnings=lambda tks: {"BRK": "2099-01-01"})
+                       today=None, earnings=lambda tks: {"BRK": "2099-01-01"}, require_tight_stop=False)
     assert [s.ticker for s in res.breakouts] == ["BRK"]
     assert "FLAT" not in [s.ticker for s in res.breakouts + res.coiling]
     assert res.regime_ok is True
@@ -157,7 +157,7 @@ def test_backtest_winner_exits_on_10sma(monkeypatch):
     _loosen(monkeypatch)
     bars = _bars(_phases_textbook() + [(0.03, 1.4, 0.04)] * 15 + [(-0.04, 1.0, 0.04)] * 10)
     bo_date = bars[72].date
-    trades = backtest_ticker("T", bars, min_score=65)
+    trades = backtest_ticker("T", bars, min_score=65, trend_filter=False)
     bo = [t for t in trades if t.entry_date == bo_date]
     assert bo, [t.entry_date for t in trades]
     tr = bo[0]
@@ -169,7 +169,7 @@ def test_backtest_stopped_out(monkeypatch):
     _loosen(monkeypatch)
     bars = _bars(_phases_textbook() + [(-0.15, 1.0, 0.05)] + [(0, 1.0, 0.05)] * 5)
     bo_date = bars[72].date
-    tr = [t for t in backtest_ticker("T", bars, min_score=65) if t.entry_date == bo_date][0]
+    tr = [t for t in backtest_ticker("T", bars, min_score=65, trend_filter=False) if t.entry_date == bo_date][0]
     assert tr.exit_reason == "stop"
     assert tr.r <= -0.99
 
@@ -184,7 +184,7 @@ def test_summarize_and_render(monkeypatch):
         d = {"WIN": win, "LOSE": lose, "SPY": spy}
         return {t: d.get(t, []) for t in tickers}
 
-    res = run_backtest(["WIN", "LOSE"], fake_fetch, min_score=65)
+    res = run_backtest(["WIN", "LOSE"], fake_fetch, min_score=65, trend_filter=False)
     st = summarize(res.trades)
     assert st and st.trades >= 2
     assert 0 < st.win_rate < 1
@@ -219,7 +219,7 @@ def test_scan_sets_aside_counter_trend(tmp_path):
         return {t: (up if t in ("SPY", "QQQ") else universe.get(t, [])) for t in tickers}
 
     res = run_sar_scan(list(universe), fetch=fake_fetch, min_score=0, apply_filters=False,
-                       today=None, earnings=None)
+                       today=None, earnings=None, require_tight_stop=False)
     listed = [s.ticker for s in res.breakouts + res.coiling]
     assert "BRK" in listed and "BNC" not in listed
     assert [s.ticker for s in res.counter_trend] == ["BNC"]
@@ -228,6 +228,10 @@ def test_scan_sets_aside_counter_trend(tmp_path):
     doc = json.loads(out.read_text())
     assert doc["counter_trend"][0]["ticker"] == "BNC"
     assert "trend_ok" in doc["results"][0]
+    alld = json.loads((tmp_path / "all_scores.json").read_text())
+    assert alld["format"] == "sar-all/1"
+    kinds = {r["ticker"]: r["kind"] for r in alld["scores"]}
+    assert kinds["BNC"] == "counter" and "BRK" in kinds
 
 
 # --- positions ----------------------------------------------------------------
@@ -282,7 +286,7 @@ def test_shortlist_new_and_fired(tmp_path):
 
     out = tmp_path / "s.json"
     out.write_text(json.dumps({"generated": "2000-01-01T00:00:00", "results": [{"ticker": "BRK", "kind": "coiling"}]}))
-    res = run_sar_scan(["BRK"], fetch=fake_fetch, min_score=0, apply_filters=False, today=None, earnings=None)
+    res = run_sar_scan(["BRK"], fetch=fake_fetch, min_score=0, apply_filters=False, today=None, earnings=None, require_tight_stop=False)
     write_shortlist(res, str(out))
     doc = json.loads(out.read_text())
     brk = [r for r in doc["results"] if r["ticker"] == "BRK"][0]
@@ -290,3 +294,18 @@ def test_shortlist_new_and_fired(tmp_path):
         assert brk["fired"] is True
     assert brk["new"] is False
     assert doc["previous"]["coiling"] == ["BRK"]
+
+
+def test_wide_stop_goes_to_watch_list():
+    universe = {"BRK": textbook()}
+    up = [Bar(str(i), 100 + i, 101 + i, 99 + i, 100 + i, 1e6) for i in range(30)]
+
+    def fake_fetch(tickers, on_progress=None, **_):
+        return {t: (up if t in ("SPY", "QQQ") else universe.get(t, [])) for t in tickers}
+
+    s = score_setup(textbook())
+    res = run_sar_scan(["BRK"], fetch=fake_fetch, min_score=0, apply_filters=False, today=None, earnings=None)
+    if s.wide_stop:
+        assert [x.ticker for x in res.wide_stop] == ["BRK"] and not res.breakouts
+    else:
+        assert [x.ticker for x in res.breakouts] == ["BRK"] and not res.wide_stop
