@@ -83,11 +83,41 @@ class SarScanResult:
         return all(vals) if vals else None
 
 
+# The doc's breakout rule needs real volume: below this multiple of the 20-day
+# average, a range break is listed as COILING (not confirmed), not BREAKOUT.
+MIN_BREAKOUT_VOLX = 1.3
+
+
+def _session_open_today() -> Optional[str]:
+    """Today's date (US/Eastern) if the regular session hasn't closed yet, else None."""
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("America/New_York"))
+    except Exception:  # pragma: no cover
+        return None
+    if now.weekday() < 5 and (now.hour, now.minute) < (16, 15):
+        return now.strftime("%Y-%m-%d")
+    return None
+
+
+def drop_partial_bar(bars: list[Bar], today: Optional[str]) -> list[Bar]:
+    """Mid-session the last bar is incomplete (volume, close) — score the prior close instead."""
+    return bars[:-1] if today and bars and bars[-1].date == today else bars
+
+
+def breakout_volx(bars: Sequence[Bar]) -> float:
+    w = bars[-20:]
+    avg = sum(b.volume for b in w) / len(w) if w else 0
+    return bars[-1].volume / avg if avg else 0.0
+
+
 def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score: int = SAR_TAKE_AT,
-                 top: int = 25, apply_filters: bool = True, on_progress=None) -> SarScanResult:
+                 top: int = 25, apply_filters: bool = True, on_progress=None,
+                 today: Optional[str] = "auto") -> SarScanResult:
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
-    data = fetch(tickers, on_progress=on_progress)
-    idx = fetch(list(SAR_REGIME_INDEXES))
+    today = _session_open_today() if today == "auto" else today
+    data = {k: drop_partial_bar(v, today) for k, v in fetch(tickers, on_progress=on_progress).items()}
+    idx = {k: drop_partial_bar(v, today) for k, v in fetch(list(SAR_REGIME_INDEXES)).items()}
     regime = {k: market_regime(idx.get(k, [])) for k in SAR_REGIME_INDEXES}
 
     with_data = passed = 0
@@ -107,9 +137,9 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
         except ValueError:
             continue
         passed += 1
-        if s.is_breakout and s.score >= min_score:
+        if s.is_breakout and s.score >= min_score and breakout_volx(bars) >= MIN_BREAKOUT_VOLX:
             breakouts.append(s)
-        elif s.is_coiling:
+        elif s.is_coiling or (s.is_breakout and s.score >= min_score):  # low-volume break = unconfirmed
             coiling.append(s)
 
     breakouts.sort(key=lambda s: s.score, reverse=True)
