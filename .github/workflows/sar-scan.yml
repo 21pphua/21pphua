@@ -1,13 +1,21 @@
 name: SAR nightly scan
 on:
   schedule:
-    - cron: "30 21 * * 1-5"   # weekdays, after the US market close
-  workflow_dispatch:           # adds a "Run workflow" button
+    - cron: "30 21 * * 1-5"   # weekdays after the US close -> scan
+    - cron: "0 14 * * 6"      # Saturdays -> weekly backtest
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "What to run"
+        type: choice
+        options: [scan, backtest]
+        default: scan
 permissions:
   contents: write
 jobs:
-  scan:
+  run:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -17,31 +25,43 @@ jobs:
         run: |
           git config user.name "sar-bot"
           git config user.email "sar-bot@users.noreply.github.com"
-      - name: Put uploaded files in the right folders (one-time)
+      - name: Put uploaded files in the right folders
         run: |
-          if [ -f engine.py ]; then
-            mkdir -p stockscan/sar
-            git mv -f __init__.py stockscan/sar/__init__.py
-            git mv -f engine.py stockscan/sar/engine.py
-            git mv -f scan.py stockscan/sar/scan.py
-            git mv -f render.py stockscan/sar/render.py
-            git mv -f cli.py stockscan/cli.py
-            git mv -f config.py stockscan/config.py
-            git mv -f build_us_universe.py scripts/build_us_universe.py
-            git mv -f test_sar.py tests/test_sar.py
-            if [ -f sar-scan.yml ]; then git rm -q sar-scan.yml; fi
-            git commit -m "Move SAR scanner files into place"
+          mkdir -p stockscan/sar scripts tests
+          mv_if () { if [ -f "$1" ]; then git mv -f "$1" "$2"; fi; }
+          for f in engine scan render backtest; do mv_if "$f.py" "stockscan/sar/$f.py"; done
+          mv_if __init__.py stockscan/sar/__init__.py
+          mv_if cli.py stockscan/cli.py
+          mv_if config.py stockscan/config.py
+          for f in build_us_universe notify; do mv_if "$f.py" "scripts/$f.py"; done
+          mv_if test_sar.py tests/test_sar.py
+          if [ -f sar-scan.yml ]; then git rm -q sar-scan.yml; fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Move uploaded SAR files into place"
             git push
           fi
       - run: pip install -e '.[data]'
       - run: python scripts/build_us_universe.py
       - name: Run the SAR scan
+        if: github.event.schedule == '30 21 * * 1-5' || (github.event_name == 'workflow_dispatch' && inputs.task == 'scan')
         run: |
           mkdir -p results
           stockscan sar --out results/shortlist.json > results/latest.txt
           cp results/latest.txt "results/scan-$(date -u +%Y-%m-%d).txt"
+      - name: Send to phone / Discord
+        if: github.event.schedule == '30 21 * * 1-5' || (github.event_name == 'workflow_dispatch' && inputs.task == 'scan')
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: python scripts/notify.py
+      - name: Run the weekly backtest
+        if: github.event.schedule == '0 14 * * 6' || (github.event_name == 'workflow_dispatch' && inputs.task == 'backtest')
+        run: |
+          mkdir -p results
+          stockscan sar-backtest --period 3y --out results/backtest.txt --trades results/backtest_trades.csv
       - name: Save results
         run: |
           git add results
-          git commit -m "SAR scan $(date -u +%Y-%m-%d)" || echo "nothing new"
+          git commit -m "SAR results $(date -u +%Y-%m-%d)" || echo "nothing new"
+          git pull --rebase
           git push
