@@ -99,6 +99,19 @@ stockscan scan --universe dow30 --top 12 --yes
 
 Produces the Stage-1 table, a per-name A+ assessment, and a final ranking.
 
+### SAR breakout scan
+
+Scores every name against the SAR Trading checklist (run-up, 10/20 SMA,
+tightening pullback, volume dry-up, breakout on volume near the high) on a
+0-100 scale and projects targets (5R, measured move, resistance, ADR, 10-SMA
+trail). See [SAR.md](SAR.md).
+
+```bash
+python scripts/build_us_universe.py          # once: all US common stocks -> us_all
+stockscan sar --out shortlist.json           # after the close
+stockscan sar --tickers NET,CRWD,PLTR --detail
+```
+
 ## What the assessment reports
 
 Each name comes back in the spec's worked-example shape:
