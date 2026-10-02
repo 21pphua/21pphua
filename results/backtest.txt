@@ -1,0 +1,34 @@
+
+SAR BACKTEST
+==================================================================================
+6245 tickers · period 3y · generated 2026-10-02T17:21:02+00:00
+
+PLAIN ENGLISH
+----------------------------------------------------------------------------------
+  Out of 8276 trades, 29% made money.
+  Winners averaged +2.2R, losers -0.9R (R = what you risked; at 1% risk, 1R = 1% of the account).
+  On average each trade made -0.04R. Negative = the rules lost money over this period.
+  Worst losing streak: 37 in a row. Worst account drop at 1% risk: 100%.
+  8% of trades reached the 5R partial. Average hold: 7 trading days.
+  The doc claims ~30% wins, ~4:1 win/loss, up to 35 losses in a row, 20-35% drawdowns.
+
+DETAIL
+----------------------------------------------------------------------------------
+                   TRADES    WIN%  AVG WIN AVG LOSS   EXP R     PF  STREAK  MAX DD
+  All trades         8276     29%    +2.19    -0.95   -0.04   0.94      37    100%
+
+  By score
+  65-74              3489     28%    +2.12    -1.00   -0.14   0.81      26    100%
+  75-84              3510     29%    +2.40    -0.93   +0.04   1.05      21     96%
+  85+                1277     32%    +1.85    -0.84   +0.03   1.06      21     68%
+
+  By market (SPY 10 vs 20 SMA at entry)
+  favorable          6145     29%    +2.24    -0.95   -0.04   0.94      77    100%
+  unfavorable        2131     30%    +2.05    -0.92   -0.04   0.95      59     97%
+
+  By stop width
+  stop <= 1 ADR      2659     24%    +3.80    -1.24   -0.02   0.98      63     99%
+  stop > 1 ADR       5617     31%    +1.60    -0.79   -0.04   0.92      25     96%
+
+CAVEATS: today's ticker list only (survivorship bias); fills at close/stop, no slippage
+or commissions; trades across tickers can overlap. Treat as a rough guide, not proof.
