@@ -1,6 +1,6 @@
 {
  "format": "sar-shortlist/1",
- "generated": "2026-10-02T17:17:46+00:00",
+ "generated": "2026-10-02T20:09:23+00:00",
  "scanned": 6245,
  "passed_filters": 667,
  "regime": {
@@ -127,8 +127,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-12",
-   "days_to_earnings": 41,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 1.09,
    "wide_stop": true,
@@ -1307,8 +1307,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-04",
-   "days_to_earnings": 33,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 1.42,
    "wide_stop": true,
@@ -2487,8 +2487,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-10-28",
-   "days_to_earnings": 26,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 0.87,
    "wide_stop": false,
@@ -3655,8 +3655,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-11",
-   "days_to_earnings": 40,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 1.15,
    "wide_stop": true,
@@ -4782,9 +4782,9 @@
    "run_high": 1.6100000143051147,
    "runup_pct": 0.40540533574329407,
    "adr_pct": 0.0849934458272261,
-   "dollar_vol": 24011166.087996364,
+   "dollar_vol": 24013851.78798616,
    "sma10": 1.7230000019073486,
-   "volx": 2.8915819130420752,
+   "volx": 2.8930585260736312,
    "targets": [
     {
      "label": "+1 ADR",
@@ -4829,8 +4829,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-05",
-   "days_to_earnings": 34,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 0.89,
    "wide_stop": false,
@@ -5874,7 +5874,7 @@
      2.56,
      2.32,
      2.51,
-     35844700
+     35866100
     ]
    ]
   },
@@ -6009,8 +6009,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-05",
-   "days_to_earnings": 34,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 0.99,
    "wide_stop": false,
@@ -7115,7 +7115,7 @@
      "frac": 1.0,
      "points": 20,
      "max_points": 20,
-     "metric": "6.85x avg vol",
+     "metric": "6.90x avg vol",
      "status": "met"
     },
     {
@@ -7136,9 +7136,9 @@
    "run_high": 0.9309999942779541,
    "runup_pct": 0.20655267292860713,
    "adr_pct": 0.07689990124352344,
-   "dollar_vol": 5171935.731758177,
+   "dollar_vol": 5199305.930754244,
    "sma10": 0.891700005531311,
-   "volx": 6.847754457611439,
+   "volx": 6.900291030439759,
    "targets": [
     {
      "label": "Measured move",
@@ -7177,8 +7177,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-05",
-   "days_to_earnings": 34,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 2.55,
    "wide_stop": true,
@@ -8222,7 +8222,7 @@
      1.48,
      1.15,
      1.43,
-     32680600
+     33063400
     ]
    ]
   },
@@ -8304,9 +8304,9 @@
    "run_high": 2.25,
    "runup_pct": 0.3157894443313545,
    "adr_pct": 0.0568817795667386,
-   "dollar_vol": 5039237.633700967,
+   "dollar_vol": 5054888.633902669,
    "sma10": 1.9205000162124635,
-   "volx": 18.208230968933492,
+   "volx": 18.213716524012384,
    "targets": [
     {
      "label": "Resistance 1",
@@ -8357,8 +8357,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-16",
-   "days_to_earnings": 45,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 1.74,
    "wide_stop": true,
@@ -9402,7 +9402,7 @@
      2.86,
      2.0,
      2.22,
-     41801000
+     41942000
     ]
    ]
   },
@@ -9460,7 +9460,7 @@
     {
      "key": "breakvol",
      "title": "On high volume",
-     "frac": 0.7024508894469705,
+     "frac": 0.7052215758879667,
      "points": 14,
      "max_points": 20,
      "metric": "1.56x avg vol",
@@ -9484,9 +9484,9 @@
    "run_high": 999.6749877929688,
    "runup_pct": 0.6085333505186292,
    "adr_pct": 0.0663609001998148,
-   "dollar_vol": 4522985676.339722,
+   "dollar_vol": 4523592228.756714,
    "sma10": 955.0609985351563,
-   "volx": 1.5619607115575764,
+   "volx": 1.5641772607103734,
    "targets": [
     {
      "label": "Resistance 1",
@@ -9531,8 +9531,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-05",
-   "days_to_earnings": 34,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 1.15,
    "wide_stop": true,
@@ -10576,7 +10576,7 @@
      1078.04,
      966.0,
      1045.78,
-     7535000
+     7546600
     ]
    ]
   },
@@ -10699,8 +10699,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-10",
-   "days_to_earnings": 39,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 0.56,
    "wide_stop": false,
@@ -11805,7 +11805,7 @@
      "frac": 1.0,
      "points": 20,
      "max_points": 20,
-     "metric": "3.60x avg vol",
+     "metric": "3.69x avg vol",
      "status": "met"
     },
     {
@@ -11826,9 +11826,9 @@
    "run_high": 10.550000190734863,
    "runup_pct": 0.012476018569008929,
    "adr_pct": 0.08051495487698498,
-   "dollar_vol": 9632745.92382431,
+   "dollar_vol": 9715219.524898529,
    "sma10": 12.671499824523925,
-   "volx": 3.6008377252537342,
+   "volx": 3.6889292445271904,
    "targets": [
     {
      "label": "Measured move",
@@ -12912,7 +12912,7 @@
      23.99,
      15.501,
      23.43,
-     2346900
+     2417300
     ]
    ]
   },
@@ -13047,8 +13047,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-10-20",
-   "days_to_earnings": 18,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "breakout",
    "risk_adr": 0.13,
    "wide_stop": false,
@@ -15407,8 +15407,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-10-27",
-   "days_to_earnings": 25,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 1.02,
    "wide_stop": true,
@@ -16575,8 +16575,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-10-29",
-   "days_to_earnings": 27,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 0.63,
    "wide_stop": false,
@@ -17755,8 +17755,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-10-29",
-   "days_to_earnings": 27,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 0.76,
    "wide_stop": false,
@@ -18881,7 +18881,7 @@
    "run_low": 42.59119986625302,
    "run_high": 65.96021358101383,
    "runup_pct": 0.5193459191381364,
-   "adr_pct": 0.0558203438834232,
+   "adr_pct": 0.05582034388342322,
    "dollar_vol": 185435374.85822678,
    "sma10": 69.29699935913087,
    "volx": 0.6146056447316196,
@@ -18935,8 +18935,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-02",
-   "days_to_earnings": 31,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 0.29,
    "wide_stop": false,
@@ -19208,7 +19208,7 @@
     ],
     [
      "2026-05-14",
-     76.9338,
+     76.9337,
      78.7669,
      75.6734,
      77.9799,
@@ -20038,7 +20038,7 @@
     {
      "key": "breakvol",
      "title": "On high volume",
-     "frac": 0.027840667181453504,
+     "frac": 0.030411769832597024,
      "points": 1,
      "max_points": 20,
      "metric": "1.02x avg vol",
@@ -20062,9 +20062,9 @@
    "run_high": 97.79000091552734,
    "runup_pct": 1.5958885055962648,
    "adr_pct": 0.08889314626333665,
-   "dollar_vol": 627368134.4940567,
+   "dollar_vol": 627447490.1916885,
    "sma10": 76.6640007019043,
-   "volx": 1.0222725337451628,
+   "volx": 1.0243294158660776,
    "targets": [
     {
      "label": "+1 ADR",
@@ -20115,8 +20115,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-10-29",
-   "days_to_earnings": 27,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 0.63,
    "wide_stop": false,
@@ -21160,7 +21160,7 @@
      83.3,
      77.25,
      81.81,
-     9148000
+     9167400
     ]
    ]
   },
@@ -21295,8 +21295,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-05",
-   "days_to_earnings": 34,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 0.3,
    "wide_stop": false,
@@ -22475,8 +22475,8 @@
      "note": "breakout-day low"
     }
    ],
-   "earnings_date": "2026-11-12",
-   "days_to_earnings": 41,
+   "earnings_date": null,
+   "days_to_earnings": null,
    "kind": "coiling",
    "risk_adr": 1.14,
    "wide_stop": true,
