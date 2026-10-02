@@ -39,6 +39,7 @@ class Trade:
     score: int
     risk_adr: float
     regime_ok: Optional[bool]
+    trend_ok: Optional[bool] = None
     exit_date: str = ""
     exit_price: float = 0.0
     exit_reason: str = ""
@@ -56,7 +57,7 @@ def _regime_by_date(index_bars: Sequence[Bar]) -> dict[str, bool]:
 
 def backtest_ticker(ticker: str, bars: Sequence[Bar], min_score: int = SAR_TAKE_AT,
                     partial: float = 0.20, max_risk_adr: Optional[float] = None,
-                    regime: Optional[dict[str, bool]] = None) -> list[Trade]:
+                    regime: Optional[dict[str, bool]] = None, trend_filter: bool = False) -> list[Trade]:
     S = Series(bars)
     n = len(S)
     trades: list[Trade] = []
@@ -67,11 +68,12 @@ def backtest_ticker(ticker: str, bars: Sequence[Bar], min_score: int = SAR_TAKE_
             i += 1
             continue
         s = score_setup(bars, i, ticker=ticker, series=S, with_targets=False)
-        if s.score < min_score or s.risk <= 0 or (max_risk_adr and s.risk_adr > max_risk_adr):
+        if (s.score < min_score or s.risk <= 0 or (max_risk_adr and s.risk_adr > max_risk_adr)
+                or (trend_filter and s.trend_ok is False)):
             i += 1
             continue
         t = Trade(ticker, s.date, s.entry, s.stop, s.score, round(s.risk_adr, 2),
-                  (regime or {}).get(s.date))
+                  (regime or {}).get(s.date), s.trend_ok)
         R, stop, target, banked, left = s.risk, s.stop, s.entry + 5 * s.risk, 0.0, 1.0
         j = i + 1
         while j < n:
@@ -165,6 +167,10 @@ class BacktestResult:
         return [("favorable", summarize([t for t in self.trades if t.regime_ok is True])),
                 ("unfavorable", summarize([t for t in self.trades if t.regime_ok is False]))]
 
+    def by_trend(self) -> list[tuple[str, Optional[Stats]]]:
+        return [("uptrend", summarize([t for t in self.trades if t.trend_ok is True])),
+                ("counter-trend", summarize([t for t in self.trades if t.trend_ok is False]))]
+
     def by_stop_width(self) -> list[tuple[str, Optional[Stats]]]:
         return [("stop <= 1 ADR", summarize([t for t in self.trades if t.risk_adr <= 1.0])),
                 ("stop > 1 ADR", summarize([t for t in self.trades if t.risk_adr > 1.0]))]
@@ -172,7 +178,8 @@ class BacktestResult:
 
 def run_backtest(tickers: Sequence[str], fetch: Callable[..., dict], period: str = "3y",
                  chunk: int = 200, min_score: int = SAR_TAKE_AT, partial: float = 0.20,
-                 max_risk_adr: Optional[float] = None, on_progress=None) -> BacktestResult:
+                 max_risk_adr: Optional[float] = None, on_progress=None,
+                 trend_filter: bool = False) -> BacktestResult:
     """Fetch history chunk-by-chunk (keeps memory flat) and simulate every ticker."""
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
     idx = fetch([SAR_REGIME_INDEXES[0]], period=period)
@@ -184,7 +191,7 @@ def run_backtest(tickers: Sequence[str], fetch: Callable[..., dict], period: str
         for tk in batch:
             bars = data.get(tk) or []
             if len(bars) > min_bars():
-                res.trades.extend(backtest_ticker(tk, bars, min_score, partial, max_risk_adr, regime))
+                res.trades.extend(backtest_ticker(tk, bars, min_score, partial, max_risk_adr, regime, trend_filter))
         if on_progress:
             on_progress(min(start + chunk, len(tickers)), len(tickers), batch[-1])
     return res
@@ -232,6 +239,7 @@ def render_backtest(res: BacktestResult) -> str:
         "",
         "DETAIL", "-" * 82, hdr, row("All trades", ov), "",
         "  By score", *[row(l, s) for l, s in res.by_score()], "",
+        "  By long-term trend (the new filter: 50/200 SMA + near 52-week high)", *[row(l, s) for l, s in res.by_trend()], "",
         "  By market (SPY 10 vs 20 SMA at entry)", *[row(l, s) for l, s in res.by_regime()], "",
         "  By stop width", *[row(l, s) for l, s in res.by_stop_width()], "",
         "CAVEATS: today's ticker list only (survivorship bias); fills at close/stop, no slippage",

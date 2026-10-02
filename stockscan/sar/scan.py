@@ -6,7 +6,10 @@ Pipeline:
   3. Score the latest bar of every survivor with the SAR checklist.
   4. Split into BREAKOUTS (score >= min_score, range broken) and COILING
      (setup formed, close within a few % of the base high — set alerts).
-  5. Market-regime check on SPY / QQQ.
+  5. Long-term trend filter: setups not in an uptrend (below / falling 50 SMA,
+     below the 200 SMA, or >25% off the 52-week high) are set aside as
+     COUNTER-TREND — bounces in a downtrend aren't SAR continuation setups.
+  6. Market-regime check on SPY / QQQ.
 
 Run it after the close: the checklist is defined on completed daily bars.
 """
@@ -18,7 +21,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Callable, Optional, Sequence
 
-from stockscan.config import SAR_TAKE_AT, SAR_REGIME_INDEXES, SAR_EARNINGS_WARN_DAYS
+from stockscan.config import SAR_TAKE_AT, SAR_REGIME_INDEXES, SAR_EARNINGS_WARN_DAYS, SAR_TREND_FILTER
 from stockscan.sar.engine import (
     Bar, SetupScore, passes_filters, score_setup, market_regime,
 )
@@ -26,7 +29,7 @@ from stockscan.sar.engine import (
 Fetcher = Callable[..., dict]
 
 
-def fetch_ohlcv(tickers: Sequence[str], period: str = "9mo", chunk: int = 200,
+def fetch_ohlcv(tickers: Sequence[str], period: str = "1y", chunk: int = 200,
                 on_progress=None, **_) -> dict[str, list[Bar]]:
     """Daily OHLCV for many tickers via yfinance, in batched chunks."""
     try:
@@ -75,6 +78,7 @@ class SarScanResult:
     regime: dict[str, Optional[bool]]
     breakouts: list[SetupScore] = field(default_factory=list)
     coiling: list[SetupScore] = field(default_factory=list)
+    counter_trend: list[SetupScore] = field(default_factory=list)
     bars: dict[str, list[Bar]] = field(default_factory=dict)
 
     @property
@@ -151,7 +155,8 @@ def _attach_earnings(setups: Sequence[SetupScore], dates: dict[str, Optional[str
 
 def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score: int = SAR_TAKE_AT,
                  top: int = 25, apply_filters: bool = True, on_progress=None,
-                 today: Optional[str] = "auto", earnings=lookup_earnings) -> SarScanResult:
+                 today: Optional[str] = "auto", earnings=lookup_earnings,
+                 trend_filter: bool = SAR_TREND_FILTER) -> SarScanResult:
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
     today = _session_open_today() if today == "auto" else today
     data = {k: drop_partial_bar(v, today) for k, v in fetch(tickers, on_progress=on_progress).items()}
@@ -161,6 +166,7 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
     with_data = passed = 0
     breakouts: list[SetupScore] = []
     coiling: list[SetupScore] = []
+    counter: list[SetupScore] = []
     for tk in tickers:
         bars = data.get(tk) or []
         if not bars:
@@ -175,6 +181,10 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
         except ValueError:
             continue
         passed += 1
+        qualifies = (s.is_breakout and s.score >= min_score) or s.is_coiling
+        if trend_filter and qualifies and s.trend_ok is False:
+            counter.append(s)
+            continue
         if s.is_breakout and s.score >= min_score and breakout_volx(bars) >= MIN_BREAKOUT_VOLX:
             breakouts.append(s)
         elif s.is_coiling or (s.is_breakout and s.score >= min_score):  # low-volume break = unconfirmed
@@ -182,14 +192,15 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
 
     breakouts.sort(key=lambda s: s.score, reverse=True)
     coiling.sort(key=lambda s: (s.prep_points, s.gap_to_base), reverse=True)
-    breakouts, coiling = breakouts[:top], coiling[:top]
+    counter.sort(key=lambda s: s.score, reverse=True)
+    breakouts, coiling, counter = breakouts[:top], coiling[:top], counter[:top]
     keep = {s.ticker for s in breakouts + coiling}
     if earnings and keep:
         _attach_earnings(breakouts + coiling, earnings(sorted(keep)))
     return SarScanResult(
         generated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         scanned=len(tickers), with_data=with_data, passed_filters=passed, regime=regime,
-        breakouts=breakouts, coiling=coiling, bars={t: data[t] for t in keep},
+        breakouts=breakouts, coiling=coiling, counter_trend=counter, bars={t: data[t] for t in keep},
     )
 
 
@@ -213,6 +224,7 @@ def write_shortlist(result: SarScanResult, path: str) -> None:
         "scanned": result.scanned,
         "passed_filters": result.passed_filters,
         "regime": result.regime,
+        "counter_trend": [{"ticker": s.ticker, "score": s.score, "why": s.trend_note} for s in result.counter_trend],
         "results": [_setup_json(s, "breakout", result.bars[s.ticker]) for s in result.breakouts]
                    + [_setup_json(s, "coiling", result.bars[s.ticker]) for s in result.coiling],
     }

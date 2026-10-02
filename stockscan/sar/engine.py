@@ -39,6 +39,7 @@ from stockscan.config import (
     SAR_COIL_MIN_PREP,
     SAR_COIL_MAX_GAP,
     SAR_MAX_RISK_ADR,
+    SAR_MAX_FROM_HIGH,
 )
 
 
@@ -95,6 +96,11 @@ class SetupScore:
     targets: list[Target] = field(default_factory=list)
     earnings_date: Optional[str] = None
     days_to_earnings: Optional[int] = None
+    trend_ok: Optional[bool] = None
+    trend_note: str = ""
+    sma50: Optional[float] = None
+    sma200: Optional[float] = None
+    pct_from_high: Optional[float] = None
 
     @property
     def risk(self) -> float:
@@ -185,6 +191,19 @@ class Series:
         dv = [b.close * b.volume for b in bars]
         self.adr20 = sma(rng, 20)
         self.dvol20 = sma(dv, 20)
+        self.s50 = sma(self.C, 50)
+        self.s200 = sma(self.C, 200)
+        # rolling 252-bar high (52 weeks) via monotonic deque
+        from collections import deque
+        self.hi252: list[float] = []
+        dq: deque = deque()
+        for i, h in enumerate(self.H):
+            while dq and self.H[dq[-1]] <= h:
+                dq.pop()
+            dq.append(i)
+            if dq[0] <= i - 252:
+                dq.popleft()
+            self.hi252.append(self.H[dq[0]])
 
     def __len__(self) -> int:
         return len(self.bars)
@@ -217,6 +236,23 @@ class Series:
         if self.dollar_vol(i) <= SAR_MIN_DOLLAR_VOL:
             return False, "dollar volume"
         return True, ""
+
+    def trend(self, i: int) -> tuple[Optional[bool], str]:
+        """Long-term uptrend check. None = not enough history to judge."""
+        s50, s200, c = self.s50[i], self.s200[i], self.C[i]
+        if s50 is None or i < 70 or self.s50[i - 20] is None:
+            return None, "not enough history for the 50 SMA"
+        fails = []
+        if c <= s50:
+            fails.append("below the 50 SMA")
+        if s50 <= self.s50[i - 20]:
+            fails.append("50 SMA falling")
+        if s200 is not None and c <= s200:
+            fails.append("below the 200 SMA")
+        off = c / self.hi252[i] - 1 if self.hi252[i] else 0.0
+        if off < -SAR_MAX_FROM_HIGH:
+            fails.append(f"{off:.0%} from 52-week high")
+        return (not fails), ("; ".join(fails) if fails else "uptrend")
 
     def breaks_range(self, i: int) -> bool:
         PL = SAR_PULLBACK_LOOKBACK
@@ -354,7 +390,10 @@ def score_setup(bars: Sequence[Bar], i: Optional[int] = None, ticker: str = "",
             targets.append(Target("Trailing exit", sma10_last, rm(sma10_last), "exit on daily close below 10 SMA"))
         targets.append(Target("Stop", stop, -1.0, "breakout-day low"))
 
+    tr_ok, tr_note = S.trend(i)
+    off = C[i] / S.hi252[i] - 1 if S.hi252[i] else None
     return SetupScore(
+        trend_ok=tr_ok, trend_note=tr_note, sma50=S.s50[i], sma200=S.s200[i], pct_from_high=off,
         ticker=ticker, date=dates[i].date, score=score, verdict=verdict, steps=steps,
         entry=entry, stop=stop, base_high=base_high, base_low=base_low,
         run_low=run_low, run_high=run_high, runup_pct=best, adr_pct=adr,

@@ -109,5 +109,12 @@ SAR_MAX_RISK_ADR: float = 1.0
 # Flag names that report earnings within this many calendar days.
 SAR_EARNINGS_WARN_DAYS: int = 10
 
+# Long-term trend filter. SAR is momentum CONTINUATION: the stock must already
+# be in an uptrend, not bouncing inside a downtrend. A setup passes when:
+#   close > 50 SMA, the 50 SMA is higher than 20 bars ago, close > 200 SMA
+#   (when 200 bars exist), and close within SAR_MAX_FROM_HIGH of its 52-week high.
+SAR_TREND_FILTER: bool = True
+SAR_MAX_FROM_HIGH: float = 0.25
+
 # Market-regime indexes (10 SMA above 20 SMA = favorable).
 SAR_REGIME_INDEXES: tuple[str, ...] = ("SPY", "QQQ")

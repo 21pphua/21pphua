@@ -66,6 +66,10 @@ def render_sar_scan(r: SarScanResult) -> str:
             )
     else:
         lines.append("  none")
+    if r.counter_trend:
+        lines += ["", f"SKIPPED — COUNTER-TREND ({len(r.counter_trend)}): scored well, but not in a long-term uptrend", "-" * 78]
+        for s in r.counter_trend[:12]:
+            lines.append(f"  {s.ticker:<7}{s.score:>6}  {s.trend_note}")
     lines += ["", "FLAGS: EARNINGS = report within the next few days (gap risk) · WIDE STOP = stop farther than",
               "one normal day's range (size down or skip) · LOW-PRICED = under $5.",
               "Rules-based rating only — not a trade signal. Verify each chart before acting.", ""]

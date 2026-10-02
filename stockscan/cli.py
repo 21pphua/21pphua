@@ -257,7 +257,8 @@ def cmd_sar(args) -> int:
     tickers = _load_universe(args)
     print(f"SAR scan: {len(tickers)} names (daily bars via yfinance) ...", file=sys.stderr)
     res = run_sar_scan(tickers, min_score=args.min_score, top=args.top,
-                       apply_filters=not args.no_filters, on_progress=_progress)
+                       apply_filters=not args.no_filters, on_progress=_progress,
+                       trend_filter=not args.no_trend_filter)
     print(render_sar_scan(res))
     if args.detail:
         from stockscan.sar.render import render_setup
@@ -278,7 +279,8 @@ def cmd_sar_backtest(args) -> int:
     tickers = _load_universe(args)
     print(f"SAR backtest: {len(tickers)} names over {args.period} ...", file=sys.stderr)
     res = run_backtest(tickers, fetch_ohlcv, period=args.period, min_score=args.min_score,
-                       partial=args.partial, max_risk_adr=args.max_risk_adr, on_progress=_progress)
+                       partial=args.partial, max_risk_adr=args.max_risk_adr, on_progress=_progress,
+                       trend_filter=args.trend_filter)
     text = render_backtest(res)
     print(text)
     if args.out:
@@ -345,6 +347,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", help="Write a shortlist JSON (with candles) for the web walkthrough.")
     sp.add_argument("--detail", action="store_true", help="Print the full checklist for each breakout.")
     sp.add_argument("--no-filters", action="store_true", help="Skip the price / ADR / $ volume filters.")
+    sp.add_argument("--no-trend-filter", action="store_true",
+                    help="Keep counter-trend setups (bounces in a downtrend) in the lists.")
     sp.set_defaults(func=cmd_sar)
 
     sp = sub.add_parser("sar-backtest", help="Replay the SAR rules over history.")
@@ -356,6 +360,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Skip trades whose stop is wider than this many ADRs (default: take all).")
     sp.add_argument("--out", help="Write the text report here.")
     sp.add_argument("--trades", help="Write every simulated trade to this CSV.")
+    sp.add_argument("--trend-filter", action="store_true",
+                    help="Only take trades in a long-term uptrend (default: take all, report both).")
     sp.set_defaults(func=cmd_sar_backtest)
 
     return p

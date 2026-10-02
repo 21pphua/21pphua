@@ -191,3 +191,40 @@ def test_summarize_and_render(monkeypatch):
     assert st.max_consec_losses >= 1
     text = render_backtest(res)
     assert "PLAIN ENGLISH" in text and "made money" in text
+
+
+# --- long-term trend filter -------------------------------------------------
+
+def _bounce_in_downtrend():
+    ph = [(-0.008, 1.0, 0.05)] * 60 + [(0.0, 0.7, 0.04)] * 20 + ["BO"]
+    return _bars(ph, seed=7, start_price=47.0)
+
+
+def test_trend_filter_rejects_downtrend_bounce():
+    s = score_setup(_bounce_in_downtrend())
+    assert s.trend_ok is False
+    assert "50 SMA" in s.trend_note or "52-week" in s.trend_note
+
+
+def test_trend_filter_passes_textbook():
+    s = score_setup(textbook())
+    assert s.trend_ok is True, s.trend_note
+
+
+def test_scan_sets_aside_counter_trend(tmp_path):
+    universe = {"BRK": textbook(), "BNC": _bounce_in_downtrend()}
+    up = [Bar(str(i), 100 + i, 101 + i, 99 + i, 100 + i, 1e6) for i in range(30)]
+
+    def fake_fetch(tickers, on_progress=None, **_):
+        return {t: (up if t in ("SPY", "QQQ") else universe.get(t, [])) for t in tickers}
+
+    res = run_sar_scan(list(universe), fetch=fake_fetch, min_score=0, apply_filters=False,
+                       today=None, earnings=None)
+    listed = [s.ticker for s in res.breakouts + res.coiling]
+    assert "BRK" in listed and "BNC" not in listed
+    assert [s.ticker for s in res.counter_trend] == ["BNC"]
+    out = tmp_path / "s.json"
+    write_shortlist(res, str(out))
+    doc = json.loads(out.read_text())
+    assert doc["counter_trend"][0]["ticker"] == "BNC"
+    assert "trend_ok" in doc["results"][0]
