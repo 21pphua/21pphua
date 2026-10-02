@@ -2,7 +2,7 @@ name: SAR nightly scan
 on:
   schedule:
     - cron: "30 21 * * 1-5"   # weekdays after the US close -> scan
-    - cron: "0 14 * * 6"      # Saturdays -> weekly backtest
+    - cron: "0 14 1 * *"      # 1st of each month -> backtest
   workflow_dispatch:
     inputs:
       task:
@@ -54,8 +54,8 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python scripts/notify.py
-      - name: Run the weekly backtest
-        if: github.event.schedule == '0 14 * * 6' || (github.event_name == 'workflow_dispatch' && inputs.task == 'backtest')
+      - name: Run the monthly backtest
+        if: github.event.schedule == '0 14 1 * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'backtest')
         run: |
           mkdir -p results
           stockscan sar-backtest --period 3y --out results/backtest.txt --trades results/backtest_trades.csv
