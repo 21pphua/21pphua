@@ -101,5 +101,13 @@ SAR_MIN_DOLLAR_VOL: float = 3_500_000
 SAR_COIL_MIN_PREP: int = 35
 SAR_COIL_MAX_GAP: float = 0.03
 
+# Flag a setup whose stop is wider than this many average daily ranges
+# (risk / entry > SAR_MAX_RISK_ADR * ADR%). Wide stops get shaken out less but
+# force tiny positions; size down or skip.
+SAR_MAX_RISK_ADR: float = 1.0
+
+# Flag names that report earnings within this many calendar days.
+SAR_EARNINGS_WARN_DAYS: int = 10
+
 # Market-regime indexes (10 SMA above 20 SMA = favorable).
 SAR_REGIME_INDEXES: tuple[str, ...] = ("SPY", "QQQ")

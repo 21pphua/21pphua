@@ -18,7 +18,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Callable, Optional, Sequence
 
-from stockscan.config import SAR_TAKE_AT, SAR_REGIME_INDEXES
+from stockscan.config import SAR_TAKE_AT, SAR_REGIME_INDEXES, SAR_EARNINGS_WARN_DAYS
 from stockscan.sar.engine import (
     Bar, SetupScore, passes_filters, score_setup, market_regime,
 )
@@ -27,7 +27,7 @@ Fetcher = Callable[..., dict]
 
 
 def fetch_ohlcv(tickers: Sequence[str], period: str = "9mo", chunk: int = 200,
-                on_progress=None) -> dict[str, list[Bar]]:
+                on_progress=None, **_) -> dict[str, list[Bar]]:
     """Daily OHLCV for many tickers via yfinance, in batched chunks."""
     try:
         import yfinance as yf
@@ -111,9 +111,47 @@ def breakout_volx(bars: Sequence[Bar]) -> float:
     return bars[-1].volume / avg if avg else 0.0
 
 
+def lookup_earnings(tickers: Sequence[str], max_workers: int = 8) -> dict[str, Optional[str]]:
+    """Next earnings date (YYYY-MM-DD) per ticker via yfinance; None when unknown."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        return {}
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import date
+
+    def one(tk: str) -> Optional[str]:
+        try:
+            cal = yf.Ticker(tk).calendar
+            ds = cal.get("Earnings Date") if isinstance(cal, dict) else None
+            if ds is None and cal is not None and hasattr(cal, "loc"):
+                ds = list(cal.loc["Earnings Date"])
+            if not isinstance(ds, (list, tuple)):
+                ds = [ds] if ds else []
+            future = sorted(str(d)[:10] for d in ds if d and str(d)[:10] >= date.today().isoformat())
+            return future[0] if future else None
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        return dict(zip(tickers, ex.map(one, tickers)))
+
+
+def _attach_earnings(setups: Sequence[SetupScore], dates: dict[str, Optional[str]]) -> None:
+    from datetime import date
+    for s in setups:
+        d = dates.get(s.ticker)
+        if d:
+            s.earnings_date = d
+            try:
+                s.days_to_earnings = (date.fromisoformat(d) - date.today()).days
+            except ValueError:
+                pass
+
+
 def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score: int = SAR_TAKE_AT,
                  top: int = 25, apply_filters: bool = True, on_progress=None,
-                 today: Optional[str] = "auto") -> SarScanResult:
+                 today: Optional[str] = "auto", earnings=lookup_earnings) -> SarScanResult:
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
     today = _session_open_today() if today == "auto" else today
     data = {k: drop_partial_bar(v, today) for k, v in fetch(tickers, on_progress=on_progress).items()}
@@ -146,6 +184,8 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
     coiling.sort(key=lambda s: (s.prep_points, s.gap_to_base), reverse=True)
     breakouts, coiling = breakouts[:top], coiling[:top]
     keep = {s.ticker for s in breakouts + coiling}
+    if earnings and keep:
+        _attach_earnings(breakouts + coiling, earnings(sorted(keep)))
     return SarScanResult(
         generated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         scanned=len(tickers), with_data=with_data, passed_filters=passed, regime=regime,
@@ -156,6 +196,9 @@ def run_sar_scan(tickers: Sequence[str], fetch: Fetcher = fetch_ohlcv, min_score
 def _setup_json(s: SetupScore, kind: str, bars: list[Bar], keep_bars: int = 130) -> dict:
     d = asdict(s)
     d["kind"] = kind
+    d["risk_adr"] = round(s.risk_adr, 2)
+    d["wide_stop"] = s.wide_stop
+    d["earnings_soon"] = s.days_to_earnings is not None and 0 <= s.days_to_earnings <= SAR_EARNINGS_WARN_DAYS
     d["steps"] = [{**asdict(st), "status": st.status} for st in s.steps]
     d["bars"] = [[b.date, round(b.open, 4), round(b.high, 4), round(b.low, 4), round(b.close, 4), int(b.volume)]
                  for b in bars[-keep_bars:]]

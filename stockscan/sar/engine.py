@@ -16,6 +16,9 @@ The weighting is this tool's own (breakout volume + range break heaviest) —
 the source docs don't specify points. Scoring mirrors the web walkthrough
 (SAR Setup Walkthrough.dc.html) so a name scores the same in both.
 
+Indicators are precomputed once per series (``Series``) so the backtester
+can score every bar of a multi-year history quickly.
+
 Educational decision framework, not financial advice.
 """
 
@@ -35,6 +38,7 @@ from stockscan.config import (
     SAR_MIN_DOLLAR_VOL,
     SAR_COIL_MIN_PREP,
     SAR_COIL_MAX_GAP,
+    SAR_MAX_RISK_ADR,
 )
 
 
@@ -87,11 +91,25 @@ class SetupScore:
     adr_pct: float
     dollar_vol: float
     sma10: Optional[float]
+    volx: float = 0.0
     targets: list[Target] = field(default_factory=list)
+    earnings_date: Optional[str] = None
+    days_to_earnings: Optional[int] = None
 
     @property
     def risk(self) -> float:
         return self.entry - self.stop
+
+    @property
+    def risk_adr(self) -> float:
+        """Stop distance in units of average daily range (>1 = stop wider than a normal day)."""
+        if not self.adr_pct or not self.entry:
+            return 0.0
+        return (self.risk / self.entry) / self.adr_pct
+
+    @property
+    def wide_stop(self) -> bool:
+        return self.risk_adr > SAR_MAX_RISK_ADR
 
     @property
     def is_breakout(self) -> bool:
@@ -150,6 +168,61 @@ def min_bars() -> int:
     return SAR_RUNUP_LOOKBACK + SAR_PULLBACK_LOOKBACK + 1
 
 
+class Series:
+    """Price arrays + indicators computed once for a bar list."""
+
+    def __init__(self, bars: Sequence[Bar]):
+        self.bars = bars
+        self.O = [b.open for b in bars]
+        self.C = [b.close for b in bars]
+        self.H = [b.high for b in bars]
+        self.L = [b.low for b in bars]
+        self.V = [b.volume for b in bars]
+        self.s10 = sma(self.C, 10)
+        self.s20 = sma(self.C, 20)
+        self.av20 = sma(self.V, 20)
+        rng = [(b.high / b.low - 1) if b.low > 0 else 0.0 for b in bars]
+        dv = [b.close * b.volume for b in bars]
+        self.adr20 = sma(rng, 20)
+        self.dvol20 = sma(dv, 20)
+
+    def __len__(self) -> int:
+        return len(self.bars)
+
+    def adr(self, i: int) -> float:
+        v = self.adr20[i]
+        if v is not None:
+            return v
+        w = self.bars[: i + 1]
+        return sum(b.high / b.low - 1 for b in w if b.low > 0) / len(w) if w else 0.0
+
+    def dollar_vol(self, i: int) -> float:
+        v = self.dvol20[i]
+        if v is not None:
+            return v
+        w = self.bars[: i + 1]
+        return sum(b.close * b.volume for b in w) / len(w) if w else 0.0
+
+    def volx(self, i: int) -> float:
+        a = self.av20[i]
+        return self.V[i] / a if a else 0.0
+
+    def passes_filters(self, i: int) -> tuple[bool, str]:
+        if i + 1 < min_bars():
+            return False, f"only {i + 1} bars"
+        if self.C[i] <= SAR_MIN_PRICE:
+            return False, "price"
+        if self.adr(i) <= SAR_MIN_ADR:
+            return False, "adr"
+        if self.dollar_vol(i) <= SAR_MIN_DOLLAR_VOL:
+            return False, "dollar volume"
+        return True, ""
+
+    def breaks_range(self, i: int) -> bool:
+        PL = SAR_PULLBACK_LOOKBACK
+        return i >= PL and self.C[i] > max(self.H[i - PL: i])
+
+
 def adr_pct(bars: Sequence[Bar], i: Optional[int] = None, n: int = 20) -> float:
     i = len(bars) - 1 if i is None else i
     w = bars[max(0, i - n + 1): i + 1]
@@ -187,19 +260,17 @@ def _swing_highs(H: Sequence[float], focus: int, above: float, k: int = 3) -> li
 
 
 def score_setup(bars: Sequence[Bar], i: Optional[int] = None, ticker: str = "",
-                take_at: int = SAR_TAKE_AT, watch_at: int = SAR_WATCH_AT) -> SetupScore:
+                take_at: int = SAR_TAKE_AT, watch_at: int = SAR_WATCH_AT,
+                series: Optional[Series] = None, with_targets: bool = True) -> SetupScore:
     """Score bar ``i`` (default: latest) as a potential SAR breakout day."""
-    n = len(bars)
+    S = series or Series(bars)
+    n = len(S)
     i = n - 1 if i is None else i
     RL, PL = SAR_RUNUP_LOOKBACK, SAR_PULLBACK_LOOKBACK
     if i < RL + PL:
         raise ValueError(f"need at least {RL + PL + 1} bars before the scored bar (have {i + 1})")
-
-    C = [b.close for b in bars]
-    H = [b.high for b in bars]
-    L = [b.low for b in bars]
-    V = [b.volume for b in bars]
-    s10, s20, av20 = sma(C, 10), sma(C, 20), sma(V, 20)
+    C, H, L, V, s10, s20, av20 = S.C, S.H, S.L, S.V, S.s10, S.s20, S.av20
+    dates = S.bars
 
     # 01 run-up: largest low->high rise in the window before the base.
     ws, we = max(0, i - RL - PL), i - PL
@@ -218,16 +289,15 @@ def score_setup(bars: Sequence[Bar], i: Optional[int] = None, ticker: str = "",
     f2 = (0.4 if sl10 > 0 else 0) + (0.4 if s10[i] > s20[i] else 0) + (0.2 if sl20 > 0 else 0)
 
     # 03 tightening base: 2nd-half avg range vs 1st-half.
-    base = list(range(i - PL, i))
     half = PL // 2
-    rg = [(H[k] - L[k]) / C[k] for k in base]
+    rg = [(H[k] - L[k]) / C[k] for k in range(i - PL, i)]
     r1, r2 = sum(rg[:half]) / half, sum(rg[half:]) / (PL - half)
     tight = r2 / r1 if r1 else 1.0
     f3 = _clamp((1 - tight) / 0.4)
-    base_high, base_low = max(H[k] for k in base), min(L[k] for k in base)
+    base_high, base_low = max(H[i - PL: i]), min(L[i - PL: i])
 
     # 04 volume dry-up: base avg vs run-up window avg.
-    p_avg = sum(V[k] for k in base) / PL
+    p_avg = sum(V[i - PL: i]) / PL
     ev = V[max(0, i - PL - RL): i - PL]
     e_avg = sum(ev) / len(ev) if ev else p_avg
     dry = p_avg / e_avg if e_avg else 1.0
@@ -247,7 +317,7 @@ def score_setup(bars: Sequence[Bar], i: Optional[int] = None, ticker: str = "",
 
     fracs = [f1, f2, f3, f4, f5, f6, f7]
     metrics = [
-        f"{best:+.1%} {bars[low_i].date}->{bars[high_i].date}",
+        f"{best:+.1%} {dates[low_i].date}->{dates[high_i].date}",
         f"10 {s10[i]:.2f} / 20 {s20[i]:.2f}",
         f"range {r1:.1%}->{r2:.1%}",
         f"{dry:.0%} of run-up vol",
@@ -264,30 +334,31 @@ def score_setup(bars: Sequence[Bar], i: Optional[int] = None, ticker: str = "",
 
     entry, stop = C[i], L[i]
     R = entry - stop
-    adr = adr_pct(bars, i)
+    adr = S.adr(i)
     sma10_last = s10[-1]
-    rm = (lambda p: (p - entry) / R) if R > 0 else (lambda p: 0.0)
 
     targets: list[Target] = []
-    if R > 0:
-        targets.append(Target("5R partial", entry + 5 * R, 5.0, "sell 10-30%, stop to breakeven"))
-    mm = base_high + (run_high - run_low)
-    targets.append(Target("Measured move", mm, rm(mm), "run-up height added to base high"))
-    for j, p in enumerate(_swing_highs(H, i, entry * 1.005)[:2], 1):
-        targets.append(Target(f"Resistance {j}", p, rm(p), "prior swing high"))
-    if adr:
-        targets.append(Target("+1 ADR", entry * (1 + adr), rm(entry * (1 + adr))))
-        targets.append(Target("+3 ADR", entry * (1 + 3 * adr), rm(entry * (1 + 3 * adr))))
-    targets.sort(key=lambda t: t.price)
-    if sma10_last:
-        targets.append(Target("Trailing exit", sma10_last, rm(sma10_last), "exit on daily close below 10 SMA"))
-    targets.append(Target("Stop", stop, -1.0, "breakout-day low"))
+    if with_targets:
+        rm = (lambda p: (p - entry) / R) if R > 0 else (lambda p: 0.0)
+        if R > 0:
+            targets.append(Target("5R partial", entry + 5 * R, 5.0, "sell 10-30%, stop to breakeven"))
+        mm = base_high + (run_high - run_low)
+        targets.append(Target("Measured move", mm, rm(mm), "run-up height added to base high"))
+        for j, p in enumerate(_swing_highs(H, i, entry * 1.005)[:2], 1):
+            targets.append(Target(f"Resistance {j}", p, rm(p), "prior swing high"))
+        if adr:
+            targets.append(Target("+1 ADR", entry * (1 + adr), rm(entry * (1 + adr))))
+            targets.append(Target("+3 ADR", entry * (1 + 3 * adr), rm(entry * (1 + 3 * adr))))
+        targets.sort(key=lambda t: t.price)
+        if sma10_last:
+            targets.append(Target("Trailing exit", sma10_last, rm(sma10_last), "exit on daily close below 10 SMA"))
+        targets.append(Target("Stop", stop, -1.0, "breakout-day low"))
 
     return SetupScore(
-        ticker=ticker, date=bars[i].date, score=score, verdict=verdict, steps=steps,
+        ticker=ticker, date=dates[i].date, score=score, verdict=verdict, steps=steps,
         entry=entry, stop=stop, base_high=base_high, base_low=base_low,
         run_low=run_low, run_high=run_high, runup_pct=best, adr_pct=adr,
-        dollar_vol=dollar_volume(bars, i), sma10=sma10_last, targets=targets,
+        dollar_vol=S.dollar_vol(i), sma10=sma10_last, volx=volx, targets=targets,
     )
 
 

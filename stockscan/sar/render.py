@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+from stockscan.config import SAR_EARNINGS_WARN_DAYS
 from stockscan.sar.engine import SetupScore
 from stockscan.sar.scan import SarScanResult
+
+
+def _flags(s: SetupScore) -> str:
+    f = []
+    if s.days_to_earnings is not None and 0 <= s.days_to_earnings <= SAR_EARNINGS_WARN_DAYS:
+        f.append(f"EARNINGS {s.days_to_earnings}d")
+    if s.wide_stop:
+        f.append(f"WIDE STOP {s.risk_adr:.1f}xADR")
+    if s.entry < 5:
+        f.append("LOW-PRICED")
+    return "  " + " · ".join(f) if f else ""
 
 
 def _regime_line(r: SarScanResult) -> str:
@@ -33,28 +45,30 @@ def render_sar_scan(r: SarScanResult) -> str:
         f"BREAKOUTS ({len(r.breakouts)})",
         "-" * 78,
     ]
-    hdr = f"  {'TICKER':<7}{'SCORE':>6}  {'VERDICT':<6}{'ENTRY':>9}{'STOP':>9}{'R%':>6}{'5R':>9}{'MM':>9}{'VOLx':>6}"
+    hdr = f"  {'TICKER':<7}{'SCORE':>6}  {'VERDICT':<6}{'ENTRY':>9}{'STOP':>9}{'R%':>6}{'5R':>9}{'MM':>9}{'VOLx':>6}  FLAGS"
     if r.breakouts:
         lines.append(hdr)
         for s in r.breakouts:
-            volx = s.steps[5].metric.split("x")[0]
             lines.append(
                 f"  {s.ticker:<7}{s.score:>6}  {s.verdict:<6}{s.entry:>9.2f}{s.stop:>9.2f}"
-                f"{s.risk / s.entry:>6.1%}{_target(s, '5R partial'):>9}{_target(s, 'Measured move'):>9}{volx:>6}"
+                f"{s.risk / s.entry:>6.1%}{_target(s, '5R partial'):>9}{_target(s, 'Measured move'):>9}{s.volx:>6.2f}{_flags(s)}"
             )
     else:
         lines.append("  none today")
     lines += ["", f"COILING — setup formed, not yet broken out ({len(r.coiling)})", "-" * 78]
     if r.coiling:
-        lines.append(f"  {'TICKER':<7}{'PREP':>6}  {'ALERT >':>9}{'GAP':>7}{'RUN-UP':>8}{'ADR':>6}{'10 SMA':>9}")
+        lines.append(f"  {'TICKER':<7}{'PREP':>6}  {'ALERT >':>9}{'GAP':>7}{'RUN-UP':>8}{'ADR':>6}{'10 SMA':>9}  FLAGS")
         for s in r.coiling:
+            tag = "  BROKE ON LOW VOLUME ·" if s.is_breakout else ""
             lines.append(
                 f"  {s.ticker:<7}{s.prep_points:>4}/50  {s.base_high:>9.2f}{s.gap_to_base:>7.1%}"
-                f"{s.runup_pct:>8.0%}{s.adr_pct:>6.1%}{(s.sma10 or 0):>9.2f}"
+                f"{s.runup_pct:>8.0%}{s.adr_pct:>6.1%}{(s.sma10 or 0):>9.2f}{tag}{_flags(s)}"
             )
     else:
         lines.append("  none")
-    lines += ["", "Rules-based rating only — not a trade signal. Verify each chart before acting.", ""]
+    lines += ["", "FLAGS: EARNINGS = report within the next few days (gap risk) · WIDE STOP = stop farther than",
+              "one normal day's range (size down or skip) · LOW-PRICED = under $5.",
+              "Rules-based rating only — not a trade signal. Verify each chart before acting.", ""]
     return "\n".join(lines)
 
 

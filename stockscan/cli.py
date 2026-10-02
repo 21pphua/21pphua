@@ -7,6 +7,7 @@ Commands
   assess   Stage 2 on one ticker: LLM-draft -> you confirm -> pressure-test.
   scan     Full funnel: screen -> draft survivors -> confirm -> ranked report.
   sar      SAR Trading breakout scan: filters -> checklist score -> targets.
+  sar-backtest  Replay the SAR rules over history; win rate, R stats, drawdown.
 """
 
 from __future__ import annotations
@@ -268,6 +269,26 @@ def cmd_sar(args) -> int:
     return 0
 
 
+def cmd_sar_backtest(args) -> int:
+    from stockscan.sar.scan import fetch_ohlcv
+    from stockscan.sar.backtest import run_backtest, render_backtest, write_trades_csv
+
+    if args.universe is None and not args.tickers:
+        args.universe = "us_all" if "us_all" in list_builtin_universes() else DEFAULT_UNIVERSE
+    tickers = _load_universe(args)
+    print(f"SAR backtest: {len(tickers)} names over {args.period} ...", file=sys.stderr)
+    res = run_backtest(tickers, fetch_ohlcv, period=args.period, min_score=args.min_score,
+                       partial=args.partial, max_risk_adr=args.max_risk_adr, on_progress=_progress)
+    text = render_backtest(res)
+    print(text)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    if args.trades:
+        write_trades_csv(res, args.trades)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # parser
 # ---------------------------------------------------------------------------
@@ -325,6 +346,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--detail", action="store_true", help="Print the full checklist for each breakout.")
     sp.add_argument("--no-filters", action="store_true", help="Skip the price / ADR / $ volume filters.")
     sp.set_defaults(func=cmd_sar)
+
+    sp = sub.add_parser("sar-backtest", help="Replay the SAR rules over history.")
+    add_universe_args(sp)
+    sp.add_argument("--period", default="3y", help="History length for yfinance (default 3y).")
+    sp.add_argument("--min-score", type=int, default=SAR_TAKE_AT, help="Score needed to enter.")
+    sp.add_argument("--partial", type=float, default=0.20, help="Fraction sold at 5R (default 0.20).")
+    sp.add_argument("--max-risk-adr", type=float, default=None,
+                    help="Skip trades whose stop is wider than this many ADRs (default: take all).")
+    sp.add_argument("--out", help="Write the text report here.")
+    sp.add_argument("--trades", help="Write every simulated trade to this CSV.")
+    sp.set_defaults(func=cmd_sar_backtest)
 
     return p
 
